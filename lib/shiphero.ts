@@ -129,7 +129,7 @@ export async function createShipment(
         shipment {
           id
           order_id
-          shipping_label {
+          shipping_labels {
             tracking_number
             carrier
           }
@@ -141,7 +141,7 @@ export async function createShipment(
   const data = await gql(mutation, {
     data: {
       order_id: orderId,
-      shipping_label: {
+      shipping_labels: {
         tracking_number: trackingNumber,
         carrier: carrierName,
       },
