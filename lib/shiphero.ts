@@ -188,7 +188,7 @@ export async function createShipmentWithTracking(
           weight: 16,
         },
         label: {
-          url: labelUrl,
+          pdf_location: labelUrl,
         },
         line_item_ids: lineItemIds,
       },
