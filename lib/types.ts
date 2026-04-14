@@ -17,6 +17,7 @@ export interface ShipHeroOrder {
     phone: string;
   };
   line_items: Array<{
+    id: string;
     sku: string;
     quantity: number;
     weight?: number;

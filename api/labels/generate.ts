@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { generateLabel, rateShop } from '../../lib/shipstation';
-import { getReadyToShipOrders, fulfillOrder } from '../../lib/shiphero';
+import { getReadyToShipOrders, createShipmentWithTracking } from '../../lib/shiphero';
 import { getOrderByShipHeroId, updateOrderStatus } from '../../lib/supabase';
 
 function requireCronSecret(req: VercelRequest, res: VercelResponse): boolean {
@@ -79,7 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
 
     // Fulfill order in ShipHero with tracking
-    await fulfillOrder(
+    await createShipmentWithTracking(
       order.id,
       label.tracking_number,
       cheapest.service_code,

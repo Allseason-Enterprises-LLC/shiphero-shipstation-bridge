@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPendingOrders } from '../../lib/supabase';
-import { getReadyToShipOrders, fulfillOrder } from '../../lib/shiphero';
+import { getReadyToShipOrders, createShipmentWithTracking } from '../../lib/shiphero';
 import { generateLabel, rateShop } from '../../lib/shipstation';
 import { updateOrderStatus } from '../../lib/supabase';
 
@@ -70,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           cheapest.service_code
         );
 
-        await fulfillOrder(
+        await createShipmentWithTracking(
           order.id,
           label.tracking_number,
           cheapest.service_code,

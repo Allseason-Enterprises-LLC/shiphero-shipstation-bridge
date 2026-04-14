@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import type { ShipHeroOrder } from './types';
 
 const SHIPHERO_API = 'https://public-api.shiphero.com/graphql';
+const WAREHOUSE_ID = 'V2FyZWhvdXNlOjEzNTg3Mg=='; // Clean Nutra warehouse in ShipHero
 
 async function getShipHeroToken(): Promise<string> {
   const { data, error } = await supabase
@@ -64,6 +65,7 @@ export async function getReadyToShipOrders(): Promise<ShipHeroOrder[]> {
               line_items(first: 50) {
                 edges {
                   node {
+                    id
                     sku
                     quantity
                     product_name
@@ -105,6 +107,7 @@ export async function getReadyToShipOrders(): Promise<ShipHeroOrder[]> {
         phone: addr.phone || '',
       },
       line_items: node.line_items.edges.map((e: any) => ({
+        id: e.node.id,
         sku: e.node.sku,
         quantity: e.node.quantity,
         weight: undefined,
@@ -117,7 +120,7 @@ export async function getReadyToShipOrders(): Promise<ShipHeroOrder[]> {
   return orders;
 }
 
-export async function fulfillOrder(
+export async function createShipmentWithTracking(
   orderId: string,
   trackingNumber: string,
   carrierName: string,
@@ -126,8 +129,8 @@ export async function fulfillOrder(
   order: ShipHeroOrder
 ): Promise<any> {
   const mutation = `
-    mutation order_fulfill($data: FulfillOrderInput!) {
-      order_fulfill(data: $data) {
+    mutation shipment_create($data: CreateShipmentInput!) {
+      shipment_create(data: $data) {
         request_id
         complexity
         shipment {
@@ -139,17 +142,37 @@ export async function fulfillOrder(
   `;
 
   const addr = order.shipping_address;
+  const lineItems = order.line_items.map(item => ({
+    line_item_id: item.id,
+    quantity: item.quantity,
+  }));
+
+  const lineItemIds = order.line_items.map(item => item.id);
 
   const data = await gql(mutation, {
     data: {
       order_id: orderId,
-      tote_id: '1',
+      warehouse_id: WAREHOUSE_ID,
       shipped_off_shiphero: true,
-      packages: {
+      address: {
+        name: addr.name || [addr.first_name, addr.last_name].filter(Boolean).join(' '),
+        address1: addr.street1,
+        address2: addr.street2 || '',
+        city: addr.city,
+        state: addr.state,
+        zip: addr.zip,
+        country: addr.country || 'US',
+        phone: addr.phone || '',
+      },
+      line_items: lineItems,
+      labels: {
+        carrier: carrierName,
+        shipping_name: addr.name || [addr.first_name, addr.last_name].filter(Boolean).join(' '),
+        shipping_method: 'Ground',
+        cost: cost,
+        tracking_number: trackingNumber,
         address: {
-          first_name: addr.first_name || addr.name?.split(' ')[0] || '',
-          last_name: addr.last_name || addr.name?.split(' ').slice(1).join(' ') || '',
-          company: addr.company || '',
+          name: addr.name || [addr.first_name, addr.last_name].filter(Boolean).join(' '),
           address1: addr.street1,
           address2: addr.street2 || '',
           city: addr.city,
@@ -157,20 +180,20 @@ export async function fulfillOrder(
           zip: addr.zip,
           country: addr.country || 'US',
           phone: addr.phone || '',
-          email: order.customer_email || '',
         },
-        carrier: carrierName,
-        method: 'Ground',
-        tracking_number: trackingNumber,
-        label_url: labelUrl,
-        cost: cost,
-        line_items: order.line_items.map(item => ({
-          sku: item.sku,
-          quantity: item.quantity,
-        })),
+        dimensions: {
+          length: 12,
+          width: 8,
+          height: 6,
+          weight: 16,
+        },
+        label: {
+          url: labelUrl,
+        },
+        line_item_ids: lineItemIds,
       },
     },
   });
 
-  return data.order_fulfill;
+  return data.shipment_create;
 }
