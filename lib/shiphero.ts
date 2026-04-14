@@ -6,13 +6,15 @@ const SHIPHERO_API = 'https://public-api.shiphero.com/graphql';
 async function getShipHeroToken(): Promise<string> {
   const { data, error } = await supabase
     .from('warehouses')
-    .select('jwt_token')
+    .select('api_credentials')
     .eq('id', process.env.SHIPHERO_WAREHOUSE_ID!)
+    .eq('provider', 'shiphero')
     .single();
 
   if (error) throw new Error(`Failed to get ShipHero token: ${error.message}`);
-  if (!data?.jwt_token) throw new Error('No JWT token stored in Supabase');
-  return data.jwt_token;
+  const creds = data?.api_credentials as any;
+  if (!creds?.accessToken) throw new Error('No ShipHero access token in api_credentials');
+  return creds.accessToken;
 }
 
 async function gql(query: string, variables?: Record<string, any>): Promise<any> {
