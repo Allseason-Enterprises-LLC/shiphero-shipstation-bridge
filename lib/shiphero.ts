@@ -27,7 +27,7 @@ async function gql(query: string, variables?: Record<string, any>): Promise<any>
     body: JSON.stringify({ query, variables }),
   });
 
-  const json = await response.json();
+  const json: any = await response.json();
   if (json.errors) {
     throw new Error(`ShipHero GQL error: ${JSON.stringify(json.errors)}`);
   }
