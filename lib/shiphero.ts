@@ -143,6 +143,7 @@ export async function fulfillOrder(
   const data = await gql(mutation, {
     data: {
       order_id: orderId,
+      tote_id: 'BRIDGE-' + orderId.slice(-8),
       shipped_off_shiphero: true,
       packages: {
         address: {
