@@ -63,7 +63,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         const cheapest = rates[0];
-        console.log(`[${order.order_number}] Generating label with ${cheapest.carrier_code} ($${cheapest.cost})`);
+        console.log(`[${order.order_number}] Generating label with ${cheapest.carrier_id} ($${cheapest.cost})`);
 
         // Generate label
         const label = await generateLabel(
@@ -71,7 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           order.order_number,
           order.shipping_address,
           totalWeight,
-          cheapest.carrier_code,
+          cheapest.carrier_id,
           cheapest.service_code
         );
 
@@ -79,7 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await createShipment(
           order.id,
           label.tracking_number,
-          cheapest.carrier_code
+          cheapest.service_code
         );
 
         // Update bridge DB
