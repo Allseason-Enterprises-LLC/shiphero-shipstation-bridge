@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { generateLabel, rateShop } from '../../lib/shipstation';
-import { getReadyToShipOrders, createShipment } from '../../lib/shiphero';
+import { getReadyToShipOrders, fulfillOrder } from '../../lib/shiphero';
 import { getOrderByShipHeroId, updateOrderStatus } from '../../lib/supabase';
 
 function requireCronSecret(req: VercelRequest, res: VercelResponse): boolean {
@@ -54,12 +54,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // Calculate total weight (default 1 lb if not specified)
+    // Default weight 1lb per item if not specified
     const totalWeight = order.line_items.reduce((sum, item) => {
       return sum + ((item.weight || 1) * item.quantity);
     }, 0) || 1;
 
-    // Rate shop to find cheapest option
+    // Rate shop for cheapest USPS option
     const rates = await rateShop(order.shipping_address, totalWeight);
     if (rates.length === 0) {
       throw new Error('No shipping rates available');
@@ -78,11 +78,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       cheapest.service_code
     );
 
-    // Create shipment in ShipHero with tracking
-    const shipment = await createShipment(
+    // Fulfill order in ShipHero with tracking
+    await fulfillOrder(
       order.id,
       label.tracking_number,
-      cheapest.service_code
+      cheapest.service_code,
+      label.label_url,
+      String(cheapest.cost),
+      order
     );
 
     // Update bridge DB with success
@@ -105,7 +108,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     
     if (shiphero_order_id) {
-      await updateOrderStatus(shiphero_order_id, 'failed', { error: msg });
+      await updateOrderStatus(shiphero_order_id, 'failed', { error: msg }).catch(() => {});
     }
 
     res.status(500).json({ error: msg });

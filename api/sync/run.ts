@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPendingOrders } from '../../lib/supabase';
-import { getReadyToShipOrders, createShipment } from '../../lib/shiphero';
+import { getReadyToShipOrders, fulfillOrder } from '../../lib/shiphero';
 import { generateLabel, rateShop } from '../../lib/shipstation';
 import { updateOrderStatus } from '../../lib/supabase';
 
@@ -31,11 +31,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const results: SyncResult[] = [];
 
   try {
-    // Get pending orders from bridge DB
     const pendingOrders = await getPendingOrders();
     console.log(`Found ${pendingOrders.length} pending orders to process`);
 
-    // Fetch full order details from ShipHero
     const shipheroOrders = await getReadyToShipOrders();
     const orderMap = new Map(shipheroOrders.map(o => [o.id, o]));
 
@@ -51,12 +49,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       try {
-        // Calculate weight
         const totalWeight = order.line_items.reduce((sum, item) => {
           return sum + ((item.weight || 1) * item.quantity);
         }, 0) || 1;
 
-        // Rate shop
         const rates = await rateShop(order.shipping_address, totalWeight);
         if (rates.length === 0) {
           throw new Error('No shipping rates available');
@@ -65,7 +61,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const cheapest = rates[0];
         console.log(`[${order.order_number}] Generating label with ${cheapest.carrier_id} ($${cheapest.cost})`);
 
-        // Generate label
         const label = await generateLabel(
           order.id,
           order.order_number,
@@ -75,14 +70,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           cheapest.service_code
         );
 
-        // Create shipment in ShipHero
-        await createShipment(
+        await fulfillOrder(
           order.id,
           label.tracking_number,
-          cheapest.service_code
+          cheapest.service_code,
+          label.label_url,
+          String(cheapest.cost),
+          order
         );
 
-        // Update bridge DB
         await updateOrderStatus(bridgeOrder.shiphero_order_id, 'success', {
           shipstation_label_id: label.label_id,
           tracking_number: label.tracking_number,
@@ -100,7 +96,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         await updateOrderStatus(bridgeOrder.shiphero_order_id, 'failed', {
           error: msg,
-        });
+        }).catch(() => {});
 
         results.push({
           order_number: order.order_number,

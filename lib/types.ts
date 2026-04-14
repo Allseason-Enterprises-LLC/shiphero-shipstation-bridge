@@ -5,6 +5,9 @@ export interface ShipHeroOrder {
   customer_email: string;
   shipping_address: {
     name: string;
+    first_name: string;
+    last_name: string;
+    company: string;
     street1: string;
     street2?: string;
     city: string;

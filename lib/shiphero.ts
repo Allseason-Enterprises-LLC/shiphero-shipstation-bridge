@@ -93,6 +93,9 @@ export async function getReadyToShipOrders(): Promise<ShipHeroOrder[]> {
       customer_email: node.email || '',
       shipping_address: {
         name: [addr.first_name, addr.last_name].filter(Boolean).join(' '),
+        first_name: addr.first_name || '',
+        last_name: addr.last_name || '',
+        company: addr.company || '',
         street1: addr.address1 || '',
         street2: addr.address2 || undefined,
         city: addr.city || '',
@@ -104,7 +107,7 @@ export async function getReadyToShipOrders(): Promise<ShipHeroOrder[]> {
       line_items: node.line_items.edges.map((e: any) => ({
         sku: e.node.sku,
         quantity: e.node.quantity,
-        weight: undefined, // weight not available on line items
+        weight: undefined,
       })),
       tags: node.tags || [],
       ready_to_ship: node.ready_to_ship,
@@ -114,39 +117,59 @@ export async function getReadyToShipOrders(): Promise<ShipHeroOrder[]> {
   return orders;
 }
 
-export async function createShipment(
+export async function fulfillOrder(
   orderId: string,
   trackingNumber: string,
-  carrierName: string
+  carrierName: string,
+  labelUrl: string,
+  cost: string,
+  order: ShipHeroOrder
 ): Promise<any> {
   const mutation = `
-    mutation shipment_create_mutation(
-      $data: CreateShipmentInput!
-    ) {
-      shipment_create(data: $data) {
+    mutation order_fulfill($data: FulfillOrderInput!) {
+      order_fulfill(data: $data) {
         request_id
         complexity
         shipment {
           id
           order_id
-          shipping_labels {
-            tracking_number
-            carrier
-          }
         }
       }
     }
   `;
 
+  const addr = order.shipping_address;
+
   const data = await gql(mutation, {
     data: {
       order_id: orderId,
-      shipping_labels: {
-        tracking_number: trackingNumber,
+      shipped_off_shiphero: true,
+      packages: {
+        address: {
+          first_name: addr.first_name || addr.name?.split(' ')[0] || '',
+          last_name: addr.last_name || addr.name?.split(' ').slice(1).join(' ') || '',
+          company: addr.company || '',
+          address1: addr.street1,
+          address2: addr.street2 || '',
+          city: addr.city,
+          state: addr.state,
+          zip: addr.zip,
+          country: addr.country || 'US',
+          phone: addr.phone || '',
+          email: order.customer_email || '',
+        },
         carrier: carrierName,
+        method: 'Ground',
+        tracking_number: trackingNumber,
+        label_url: labelUrl,
+        cost: cost,
+        line_items: order.line_items.map(item => ({
+          sku: item.sku,
+          quantity: item.quantity,
+        })),
       },
     },
   });
 
-  return data.shipment_create;
+  return data.order_fulfill;
 }
