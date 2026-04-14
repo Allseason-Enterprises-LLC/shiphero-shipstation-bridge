@@ -40,8 +40,7 @@ export async function getReadyToShipOrders(): Promise<ShipHeroOrder[]> {
   const query = `
     query {
       orders(
-        filter: { ready_to_ship: false }
-        first: 50
+        fulfillment_status: "pending"
       ) {
         data(first: 50) {
           edges {
@@ -49,11 +48,13 @@ export async function getReadyToShipOrders(): Promise<ShipHeroOrder[]> {
               id
               order_number
               shop_name
-              customer_email
+              email
               shipping_address {
-                name
-                street1
-                street2
+                first_name
+                last_name
+                company
+                address1
+                address2
                 city
                 state
                 zip
@@ -65,12 +66,13 @@ export async function getReadyToShipOrders(): Promise<ShipHeroOrder[]> {
                   node {
                     sku
                     quantity
-                    weight
+                    product_name
                   }
                 }
               }
               tags
               ready_to_ship
+              fulfillment_status
             }
           }
         }
@@ -83,16 +85,26 @@ export async function getReadyToShipOrders(): Promise<ShipHeroOrder[]> {
 
   data.orders.data.edges.forEach((edge: any) => {
     const node = edge.node;
+    const addr = node.shipping_address;
     orders.push({
       id: node.id,
       order_number: node.order_number,
       shop_name: node.shop_name,
-      customer_email: node.customer_email,
-      shipping_address: node.shipping_address,
+      customer_email: node.email || '',
+      shipping_address: {
+        name: [addr.first_name, addr.last_name].filter(Boolean).join(' '),
+        street1: addr.address1 || '',
+        street2: addr.address2 || undefined,
+        city: addr.city || '',
+        state: addr.state || '',
+        zip: addr.zip || '',
+        country: addr.country || 'US',
+        phone: addr.phone || '',
+      },
       line_items: node.line_items.edges.map((e: any) => ({
         sku: e.node.sku,
         quantity: e.node.quantity,
-        weight: e.node.weight,
+        weight: undefined, // weight not available on line items
       })),
       tags: node.tags || [],
       ready_to_ship: node.ready_to_ship,
@@ -105,27 +117,35 @@ export async function getReadyToShipOrders(): Promise<ShipHeroOrder[]> {
 export async function createShipment(
   orderId: string,
   trackingNumber: string,
-  carrierCode: string
-): Promise<{ shipment_id: string }> {
+  carrierName: string
+): Promise<any> {
   const mutation = `
-    mutation CreateShipment($orderId: ID!, $trackingNumber: String!, $carrierCode: String!) {
-      shipment_create(
-        order_id: $orderId
-        shipment: {
-          tracking_number: $trackingNumber
-          carrier_code: $carrierCode
+    mutation shipment_create_mutation(
+      $data: CreateShipmentInput!
+    ) {
+      shipment_create(data: $data) {
+        request_id
+        complexity
+        shipment {
+          id
+          order_id
+          shipping_label {
+            tracking_number
+            carrier
+          }
         }
-      ) {
-        shipment_id
-        order_id
       }
     }
   `;
 
   const data = await gql(mutation, {
-    orderId,
-    trackingNumber,
-    carrierCode,
+    data: {
+      order_id: orderId,
+      shipping_label: {
+        tracking_number: trackingNumber,
+        carrier: carrierName,
+      },
+    },
   });
 
   return data.shipment_create;
