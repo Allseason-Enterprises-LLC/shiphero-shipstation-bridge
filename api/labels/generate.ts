@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { generateLabel, rateShop } from '../../lib/shipstation';
 import { getReadyToShipOrders, createShipmentWithTracking } from '../../lib/shiphero';
-import { getOrderByShipHeroId, updateOrderStatus } from '../../lib/supabase';
+import { getOrderByShipHeroId, updateOrderStatus, recordOrder } from '../../lib/supabase';
 
 function requireCronSecret(req: VercelRequest, res: VercelResponse): boolean {
   const auth = req.headers.authorization?.replace('Bearer ', '');
@@ -27,15 +27,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // Get the order from bridge DB
-    const bridgeOrder = await getOrderByShipHeroId(shiphero_order_id);
+    // Get the order from bridge DB, or create it if not exists
+    let bridgeOrder = await getOrderByShipHeroId(shiphero_order_id);
     if (!bridgeOrder) {
-      res.status(404).json({ error: 'Order not found in bridge DB' });
-      return;
+      // Auto-record this order
+      bridgeOrder = await recordOrder({
+        shiphero_order_id: shiphero_order_id,
+        shiphero_order_number: 'unknown',
+        status: 'pending',
+      });
     }
 
-    if (bridgeOrder.status !== 'pending') {
-      res.status(400).json({ error: `Order already ${bridgeOrder.status}` });
+    if (bridgeOrder.status === 'success') {
+      res.status(400).json({ error: 'Order already fulfilled' });
       return;
     }
 

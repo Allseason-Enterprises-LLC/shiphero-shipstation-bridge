@@ -42,6 +42,7 @@ export async function getReadyToShipOrders(): Promise<ShipHeroOrder[]> {
     query {
       orders(
         fulfillment_status: "pending"
+        order_date_from: "2026-04-10"
       ) {
         data(first: 50) {
           edges {
