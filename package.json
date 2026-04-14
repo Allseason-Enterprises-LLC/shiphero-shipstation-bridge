@@ -1,0 +1,22 @@
+{
+  "name": "shiphero-shipstation-bridge",
+  "version": "1.0.0",
+  "description": "ShipHero to ShipStation label generation bridge",
+  "main": "api/index.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "tsc",
+    "test": "node --test api/**/*.test.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "env": {
+    "SUPABASE_URL": "@supabase_url",
+    "SUPABASE_SERVICE_ROLE_KEY": "@supabase_service_role_key",
+    "SHIPSTATION_API_KEY": "@shipstation_api_key",
+    "SHIPHERO_WAREHOUSE_ID": "@shiphero_warehouse_id",
+    "SHIPHERO_CUSTOMER_ACCOUNT_ID": "@shiphero_customer_account_id",
+    "CRON_SECRET": "@cron_secret",
+    "SHIP_FROM_NAME": "@ship_from_name",
+    "SHIP_FROM_ADDRESS1": "@ship_from_address1",
+    "SHIP_FROM_CITY": "@ship_from_city",
+    "SHIP_FROM_STATE": "@ship_from_state",
+    "SHIP_FROM_ZIP": "@ship_from_zip",
+    "SHIP_FROM_COUNTRY": "@ship_from_country",
+    "SHIP_FROM_PHONE": "@ship_from_phone"
+  }
+}
