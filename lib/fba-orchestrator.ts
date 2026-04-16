@@ -173,6 +173,25 @@ export async function createFbaInboundShipment(
 }
 
 /**
+ * Fetch FBA labels from BrandMind API
+ */
+export async function fetchFbaLabels(
+  shipmentId: string
+): Promise<{ downloadUrl: string | null }> {
+  const url = `${BRANDMIND_API_URL}/api/shipments/fba/labels?shipmentId=${shipmentId}`;
+  
+  const response = await fetch(url);
+  const json = await response.json();
+  
+  if (!response.ok || !json.success) {
+    console.error('[fba] Label fetch failed:', json);
+    return { downloadUrl: null };
+  }
+  
+  return { downloadUrl: json.downloadUrl || null };
+}
+
+/**
  * Resolve CIN7 line items to Amazon MSKUs
  */
 export async function resolveTransferItems(

@@ -5,6 +5,7 @@ import {
   resolveTransferItems,
   createFbaInboundShipment,
   updateFbaStatus,
+  fetchFbaLabels,
 } from '../../lib/fba-orchestrator';
 
 // Allow up to 5 minutes for FBA workflow
@@ -114,13 +115,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       weight
     );
 
+    const shipmentIds = fbaResult.shipmentIds || fbaResult.amazon_shipment_ids || [];
+    const confirmationIds = fbaResult.shipmentConfirmationIds || [];
+
+    // Fetch labels for each shipment
+    let labelsUrl: string | null = null;
+    const labelId = confirmationIds[0] || shipmentIds[0];
+    if (labelId) {
+      console.log(`[fba] Fetching labels for shipment ${labelId}...`);
+      const labelResult = await fetchFbaLabels(labelId);
+      labelsUrl = labelResult.downloadUrl;
+    }
+
     // Update record with Amazon response
-    const updatedRecord = await updateFbaStatus(record.id, 'labels_ready', {
+    await updateFbaStatus(record.id, 'labels_ready', {
       plan_id: fbaResult.planId || fbaResult.plan_id,
-      amazon_shipment_ids: fbaResult.shipmentIds || fbaResult.amazon_shipment_ids,
-      amazon_internal_shipment_ids: fbaResult.shipmentConfirmationIds,
+      amazon_shipment_ids: shipmentIds,
+      amazon_internal_shipment_ids: confirmationIds,
       box_ids: fbaResult.boxIds || fbaResult.box_ids,
-      labels_url: fbaResult.labelsUrl,
+      labels_url: labelsUrl,
       prep_instructions: fbaResult.prepInstructions || fbaResult.prep_instructions,
     });
 
@@ -129,11 +142,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       cin7_transfer_number,
       shipment_id: record.id,
       amazon_plan_id: fbaResult.planId || fbaResult.plan_id,
-      amazon_shipment_ids: fbaResult.shipmentIds || fbaResult.amazon_shipment_ids,
+      amazon_shipment_ids: shipmentIds,
+      amazon_confirmation_ids: confirmationIds,
       box_ids: fbaResult.boxIds || fbaResult.box_ids,
-      labels_url: fbaResult.labelsUrl,
+      labels_url: labelsUrl,
       resolved_items: resolved,
       unresolved_items: unresolved.length > 0 ? unresolved : undefined,
+      prep_instructions: fbaResult.prepInstructions || fbaResult.prep_instructions,
       status: 'labels_ready',
     });
   } catch (error) {
