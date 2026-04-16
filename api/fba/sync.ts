@@ -1,9 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
-  createFbaRecord,
   updateFbaStatus,
-  getFbaShipmentsByStatus,
-  getFbaByTransferNumber,
+  getPendingFbaShipments,
   resolveTransferItems,
   createFbaInboundShipment,
 } from '../../lib/fba-orchestrator';
@@ -35,18 +33,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     // Get FBA shipments that are ready for Amazon submission
-    const pendingFba = await getFbaShipmentsByStatus(['shiphero_created', 'pending_fba']);
-    console.log(`[fba-sync] Found ${pendingFba.length} shipments ready for FBA submission`);
+    const pendingFba = await getPendingFbaShipments();
+    console.log(`[fba-sync] Found ${pendingFba.length} draft shipments ready for FBA submission`);
 
     for (const shipment of pendingFba) {
       try {
-        // Skip if already being processed
-        if (shipment.status === 'fba_creating') continue;
-
-        // Mark as creating
-        await updateFbaStatus(shipment.id, 'fba_creating', {
-          workflow_step: 'resolving_skus',
-        });
+        // Skip if not draft
+        if (shipment.status !== 'draft') continue;
 
         // Get the transfer items from the request payload
         const transferItems = (shipment.request_payload?.items as Array<{ sku: string; quantity: number }>) || [];
@@ -90,19 +83,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         };
         const weightLbs = (shipment.request_payload?.weightLbs as number) || 25;
 
-        await updateFbaStatus(shipment.id, 'fba_creating', {
-          workflow_step: 'calling_amazon_api',
-        });
-
         // Call BrandMind's existing FBA create endpoint
         const fbaResult = await createFbaInboundShipment(
+          shipment.ship_from_warehouse_id || process.env.SHIPHERO_WAREHOUSE_ID!,
           resolved.map(r => ({ sellerSku: r.sellerSku, quantity: r.quantity })),
           boxDims,
           weightLbs
         );
 
         // Update with Amazon response
-        await updateFbaStatus(shipment.id, 'fba_created', {
+        await updateFbaStatus(shipment.id, 'labels_ready', {
           amazon_inbound_plan_id: fbaResult.planId || fbaResult.plan_id,
           amazon_shipment_ids: fbaResult.shipmentIds || fbaResult.amazon_shipment_ids,
           amazon_shipment_confirmation_ids: fbaResult.shipmentConfirmationIds || fbaResult.amazon_internal_shipment_ids,

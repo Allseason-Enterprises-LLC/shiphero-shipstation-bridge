@@ -29,9 +29,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Provide ?transfer=CIN7-TR-XXXXX or ?id=uuid' });
     }
 
-    let query = supabase.from('cin7_fba_shipments').select('*');
+    let query = supabase.from('fba_shipments').select('*');
     if (transferNumber) {
-      query = query.eq('cin7_transfer_number', transferNumber);
+      query = query.eq('name', `CIN7-${transferNumber}`);
     } else {
       query = query.eq('id', shipmentId);
     }
@@ -43,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const shipment = data as any;
 
-    if (!['fba_created', 'labels_ready', 'warehouse_notified'].includes(shipment.status)) {
+    if (!['labels_ready', 'shipped', 'delivered'].includes(shipment.status)) {
       return res.status(400).json({
         error: `Shipment not ready. Current status: ${shipment.status}`,
         shipment_id: shipment.id,
@@ -54,10 +54,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Build the warehouse packet
     const resolvedItems = shipment.request_payload?.resolved_items || [];
     const packet: WarehousePacket = {
-      cin7_transfer_number: shipment.cin7_transfer_number,
-      shiphero_order_number: shipment.shiphero_order_number || 'N/A',
-      amazon_shipment_id: shipment.amazon_shipment_confirmation_ids?.[0] || shipment.amazon_shipment_ids?.[0] || 'N/A',
-      amazon_plan_id: shipment.amazon_inbound_plan_id || 'N/A',
+      cin7_transfer_number: shipment.name?.replace('CIN7-', '') || 'N/A',
+      shiphero_order_number: 'N/A',
+      amazon_shipment_id: shipment.amazon_shipment_ids?.[0] || 'N/A',
+      amazon_plan_id: shipment.plan_id || 'N/A',
       destination_fc: 'See Amazon Seller Central', // TODO: extract from response
       items: resolvedItems.map((item: any) => ({
         cin7_sku: item.cin7Sku || item.cin7_sku,
@@ -72,9 +72,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
 
     // Mark as warehouse_notified if first access
-    if (shipment.status === 'fba_created' || shipment.status === 'labels_ready') {
+    if (shipment.status === 'labels_ready') {
       await supabase
-        .from('cin7_fba_shipments')
+        .from('fba_shipments')
         .update({
           status: 'warehouse_notified',
           updated_at: new Date().toISOString(),

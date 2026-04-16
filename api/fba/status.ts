@@ -19,13 +19,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const status = req.query.status as string;
 
     let query = supabase
-      .from('cin7_fba_shipments')
+      .from('fba_shipments')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(20);
 
     if (transferNumber) {
-      query = query.eq('cin7_transfer_number', transferNumber);
+      query = query.eq('name', `CIN7-${transferNumber}`);
     }
     if (status) {
       query = query.eq('status', status);

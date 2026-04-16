@@ -1,41 +1,84 @@
 import { supabase } from './supabase';
-import type { Cin7FbaShipment, FbaShipmentStatus, SkuMaster } from './fba-types';
+import type { FbaShipmentStatus, SkuMaster } from './fba-types';
 
 const BRANDMIND_API_URL = process.env.BRANDMIND_API_URL || 'https://brandmind-api.vercel.app';
-const SHIP_FROM_WAREHOUSE_ID = process.env.SHIPHERO_WAREHOUSE_ID!;
 const MARKETPLACE_ID = 'ATVPDKIKX0DER'; // US
 
 /**
- * Look up Amazon SKU mapping for a CIN7 SKU
+ * Look up Amazon SKU mapping using the EXISTING sku_master table.
+ * Schema: cin7_sku, amazon_seller_sku (not amz_sku)
  */
 export async function lookupSkuMapping(cin7Sku: string): Promise<SkuMaster | null> {
-  const { data, error } = await supabase
+  // First try sku_master (has cin7_sku → amazon_seller_sku)
+  const { data: skuData } = await supabase
     .from('sku_master')
-    .select('cin7_sku, product_name, amz_sku, amz_asin, amz_fnsku')
+    .select('cin7_sku, amazon_seller_sku, amazon_asin, notes')
     .eq('cin7_sku', cin7Sku)
-    .single();
+    .maybeSingle();
 
-  if (error || !data) return null;
-  return data as SkuMaster;
+  if (skuData?.amazon_seller_sku) {
+    // Look up FNSKU from amazon_products table
+    const { data: amzData } = await supabase
+      .from('amazon_products')
+      .select('seller_sku, fnsku, asin')
+      .eq('seller_sku', skuData.amazon_seller_sku)
+      .eq('marketplace_id', MARKETPLACE_ID)
+      .maybeSingle();
+
+    return {
+      cin7_sku: cin7Sku,
+      product_name: skuData.notes?.split('cin7Name:')[1]?.split('|')[0]?.trim() || cin7Sku,
+      amz_sku: skuData.amazon_seller_sku,
+      amz_asin: amzData?.asin || skuData.amazon_asin || null,
+      amz_fnsku: amzData?.fnsku || null,
+    };
+  }
+
+  // Fallback: search amazon_products directly by seller_sku patterns
+  // Some CIN7 SKUs might map directly
+  const { data: directMatch } = await supabase
+    .from('amazon_products')
+    .select('seller_sku, fnsku, asin')
+    .eq('marketplace_id', MARKETPLACE_ID)
+    .eq('seller_sku', cin7Sku)
+    .maybeSingle();
+
+  if (directMatch) {
+    return {
+      cin7_sku: cin7Sku,
+      product_name: cin7Sku,
+      amz_sku: directMatch.seller_sku,
+      amz_asin: directMatch.asin || null,
+      amz_fnsku: directMatch.fnsku || null,
+    };
+  }
+
+  return null;
 }
 
 /**
- * Create a new FBA shipment audit record
+ * Create a new FBA shipment record in the EXISTING fba_shipments table.
+ * Adds cin7_transfer fields to link to the transfer pipeline.
  */
 export async function createFbaRecord(
-  cin7TransferId: string,
   cin7TransferNumber: string,
   shipheroOrderId?: string,
-  shipheroOrderNumber?: string
-): Promise<Cin7FbaShipment> {
+  shipheroOrderNumber?: string,
+  items?: Array<{ sellerSku: string; quantity: number }>,
+  box?: { length: number; width: number; height: number },
+  weightLbs?: number
+): Promise<any> {
   const { data, error } = await supabase
-    .from('cin7_fba_shipments')
+    .from('fba_shipments')
     .insert([{
-      cin7_transfer_id: cin7TransferId,
-      cin7_transfer_number: cin7TransferNumber,
-      shiphero_order_id: shipheroOrderId,
-      shiphero_order_number: shipheroOrderNumber,
-      status: shipheroOrderId ? 'shiphero_created' : 'pending_shiphero',
+      name: `CIN7-${cin7TransferNumber}`,
+      marketplace_id: MARKETPLACE_ID,
+      ship_from_warehouse_id: process.env.SHIPHERO_WAREHOUSE_ID,
+      status: 'draft',
+      box_length: box?.length || 20,
+      box_width: box?.width || 15,
+      box_height: box?.height || 12,
+      box_weight_lbs: weightLbs || 25,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }])
@@ -43,7 +86,7 @@ export async function createFbaRecord(
     .single();
 
   if (error) throw new Error(`Failed to create FBA record: ${error.message}`);
-  return data as Cin7FbaShipment;
+  return data;
 }
 
 /**
@@ -51,11 +94,11 @@ export async function createFbaRecord(
  */
 export async function updateFbaStatus(
   id: string,
-  status: FbaShipmentStatus,
-  updates?: Partial<Cin7FbaShipment>
-): Promise<Cin7FbaShipment> {
+  status: string,
+  updates?: Record<string, any>
+): Promise<any> {
   const { data, error } = await supabase
-    .from('cin7_fba_shipments')
+    .from('fba_shipments')
     .update({
       status,
       ...updates,
@@ -66,45 +109,42 @@ export async function updateFbaStatus(
     .single();
 
   if (error) throw new Error(`Failed to update FBA record: ${error.message}`);
-  return data as Cin7FbaShipment;
+  return data;
 }
 
 /**
- * Get pending FBA shipments by status
+ * Get pending FBA shipments
  */
-export async function getFbaShipmentsByStatus(
-  status: FbaShipmentStatus | FbaShipmentStatus[]
-): Promise<Cin7FbaShipment[]> {
-  const statuses = Array.isArray(status) ? status : [status];
+export async function getPendingFbaShipments(): Promise<any[]> {
   const { data, error } = await supabase
-    .from('cin7_fba_shipments')
+    .from('fba_shipments')
     .select('*')
-    .in('status', statuses)
+    .eq('status', 'draft')
     .order('created_at', { ascending: true })
-    .limit(20);
+    .limit(10);
 
   if (error) throw new Error(`Failed to fetch FBA shipments: ${error.message}`);
-  return (data || []) as Cin7FbaShipment[];
+  return data || [];
 }
 
 /**
- * Check if a CIN7 transfer already has an FBA record
+ * Check if a transfer already has an FBA record
  */
-export async function getFbaByTransferNumber(transferNumber: string): Promise<Cin7FbaShipment | null> {
-  const { data, error } = await supabase
-    .from('cin7_fba_shipments')
+export async function getFbaByTransferName(transferNumber: string): Promise<any | null> {
+  const { data } = await supabase
+    .from('fba_shipments')
     .select('*')
-    .eq('cin7_transfer_number', transferNumber)
-    .single();
+    .eq('name', `CIN7-${transferNumber}`)
+    .maybeSingle();
 
-  if (error && error.code !== 'PGRST116') throw error;
-  return (data || null) as Cin7FbaShipment | null;
+  return data;
 }
 
 /**
  * Call BrandMind's existing FBA create endpoint
  */
 export async function createFbaInboundShipment(
+  shipFromWarehouseId: string,
   items: Array<{ sellerSku: string; quantity: number }>,
   boxDimensions: { length: number; width: number; height: number },
   weightLbs: number
@@ -115,10 +155,9 @@ export async function createFbaInboundShipment(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.CRON_SECRET}`,
     },
     body: JSON.stringify({
-      shipFromWarehouseId: SHIP_FROM_WAREHOUSE_ID,
+      shipFromWarehouseId,
       marketplaceId: MARKETPLACE_ID,
       items,
       box: boxDimensions,
@@ -128,13 +167,13 @@ export async function createFbaInboundShipment(
 
   const json = await response.json();
   if (!response.ok) {
-    throw new Error(`FBA create failed: ${JSON.stringify(json)}`);
+    throw new Error(`FBA create failed (${response.status}): ${JSON.stringify(json)}`);
   }
   return json;
 }
 
 /**
- * Resolve CIN7 line items to Amazon MSKUs using sku_master
+ * Resolve CIN7 line items to Amazon MSKUs
  */
 export async function resolveTransferItems(
   cin7Items: Array<{ sku: string; quantity: number }>
@@ -149,12 +188,12 @@ export async function resolveTransferItems(
     const mapping = await lookupSkuMapping(item.sku);
     
     if (!mapping) {
-      unresolved.push({ ...item, reason: 'CIN7 SKU not found in sku_master' });
+      unresolved.push({ ...item, reason: 'CIN7 SKU not found in sku_master or amazon_products' });
       continue;
     }
     
     if (!mapping.amz_sku) {
-      unresolved.push({ ...item, reason: 'No Amazon SKU mapped for this CIN7 SKU' });
+      unresolved.push({ ...item, reason: 'No Amazon seller SKU mapped' });
       continue;
     }
 

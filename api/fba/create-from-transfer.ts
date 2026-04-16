@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   createFbaRecord,
-  getFbaByTransferNumber,
+  getFbaByTransferName,
   resolveTransferItems,
 } from '../../lib/fba-orchestrator';
 
@@ -51,7 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Check for duplicate
-    const existing = await getFbaByTransferNumber(cin7_transfer_number);
+    const existing = await getFbaByTransferName(cin7_transfer_number);
     if (existing) {
       return res.status(200).json({
         message: 'FBA record already exists',
@@ -65,17 +65,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     // Create the FBA record
     const record = await createFbaRecord(
-      cin7_transfer_id || cin7_transfer_number,
       cin7_transfer_number,
       shiphero_order_id,
-      shiphero_order_number
+      shiphero_order_number,
+      items,
+      box,
+      weightLbs
     );
 
     // Store the items and box info in request_payload for later processing
     const { error: updateError } = await (await import('../../lib/supabase')).supabase
       .from('cin7_fba_shipments')
       .update({
-        status: shiphero_order_id ? 'shiphero_created' : 'pending_fba',
+        status: 'draft',
         request_payload: {
           items,
           box: box || { length: 20, width: 15, height: 12 },
