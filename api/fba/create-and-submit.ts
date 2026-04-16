@@ -95,9 +95,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const boxDims = box || { length: 20, width: 15, height: 12 };
     const weight = weightLbs || 25;
 
+    // Map expiration dates from input items to resolved items
+    const itemExpirations: Record<string, string> = {};
+    for (const item of items) {
+      if (item.expiration) {
+        itemExpirations[item.sku] = item.expiration;
+      }
+    }
+
     const fbaResult = await createFbaInboundShipment(
       record.ship_from_warehouse_id || process.env.SHIPHERO_WAREHOUSE_ID!,
-      resolved.map(r => ({ sellerSku: r.sellerSku, quantity: r.quantity })),
+      resolved.map(r => ({
+        sellerSku: r.sellerSku,
+        quantity: r.quantity,
+        expiration: itemExpirations[r.cin7Sku] || undefined,
+      })),
       boxDims,
       weight
     );

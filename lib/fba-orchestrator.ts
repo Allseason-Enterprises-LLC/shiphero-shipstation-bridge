@@ -145,7 +145,7 @@ export async function getFbaByTransferName(transferNumber: string): Promise<any 
  */
 export async function createFbaInboundShipment(
   shipFromWarehouseId: string,
-  items: Array<{ sellerSku: string; quantity: number }>,
+  items: Array<{ sellerSku: string; quantity: number; expiration?: string }>,
   boxDimensions: { length: number; width: number; height: number },
   weightLbs: number
 ): Promise<any> {
