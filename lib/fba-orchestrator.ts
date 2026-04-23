@@ -181,7 +181,7 @@ export async function fetchFbaLabels(
   const url = `${BRANDMIND_API_URL}/api/shipments/fba/labels?shipmentId=${shipmentId}`;
   
   const response = await fetch(url);
-  const json = await response.json();
+  const json: any = await response.json();
   
   if (!response.ok || !json.success) {
     console.error('[fba] Label fetch failed:', json);

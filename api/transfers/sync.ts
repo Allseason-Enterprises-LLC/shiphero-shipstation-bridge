@@ -60,10 +60,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify(req.body),
     });
 
-    const data = await response.json();
+    const data: any = await response.json();
     res.status(response.status).json({
       route: 'inbound_po',
-      ...data,
+      ...(typeof data === 'object' && data !== null ? data : { result: data }),
     });
   } else {
     res.status(400).json({
