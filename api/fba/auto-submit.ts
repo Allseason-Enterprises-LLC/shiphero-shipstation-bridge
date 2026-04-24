@@ -100,13 +100,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log(`[fba-auto] ${totalQty} units ÷ ${unitsPerBox} per case = ${numBoxes} boxes`);
 
       // 4. Submit to Amazon FBA
-      console.log(`[fba-auto] Submitting to Amazon: ${skuMapping.amz_sku} x ${totalQty}, ${numBoxes} boxes, exp ${productData.expirationDate}`);
+      console.log(`[fba-auto] Submitting to Amazon: ${skuMapping.amz_sku} x ${totalQty}, ${numBoxes} boxes of ${unitsPerBox} each, exp ${productData.expirationDate}`);
 
       const fbaResult = await createFbaInboundShipment(
         warehouseId,
         [{
           sellerSku: skuMapping.amz_sku,
           quantity: totalQty,
+          casePack: unitsPerBox,
+          cases: numBoxes,
           expiration: productData.expirationDate,
         }],
         {

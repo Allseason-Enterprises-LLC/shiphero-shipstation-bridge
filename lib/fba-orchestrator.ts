@@ -145,11 +145,19 @@ export async function getFbaByTransferName(transferNumber: string): Promise<any 
  */
 export async function createFbaInboundShipment(
   shipFromWarehouseId: string,
-  items: Array<{ sellerSku: string; quantity: number; expiration?: string }>,
+  items: Array<{ sellerSku: string; quantity: number; casePack?: number; cases?: number; expiration?: string }>,
   boxDimensions: { length: number; width: number; height: number },
-  weightLbs: number
+  weightLbs: number,
+  options?: {
+    shipFromAddressId?: string;
+    boxQuantity?: number;
+    casePack?: number;
+  }
 ): Promise<any> {
   const url = `${BRANDMIND_API_URL}/api/shipments/fba/create`;
+
+  // Use Clean Nutra Las Vegas address by default
+  const shipFromAddressId = options?.shipFromAddressId || '9213d02a-6992-4310-8514-e60ca03d5782';
 
   const response = await fetch(url, {
     method: 'POST',
@@ -157,7 +165,7 @@ export async function createFbaInboundShipment(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      shipFromWarehouseId,
+      shipFromAddressId,
       marketplaceId: MARKETPLACE_ID,
       items,
       box: boxDimensions,
