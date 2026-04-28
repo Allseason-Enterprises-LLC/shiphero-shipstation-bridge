@@ -19,6 +19,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       items = [],
       box = {},
       weightLbs,
+      boxQuantity,
+      casePack,
     } = body;
 
     if (!items.length) {
@@ -65,6 +67,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         height: Number(box.height),
         weightLbs: Number(weightLbs || box.weightLbs),
       },
+      ...(boxQuantity ? { boxQuantity: Number(boxQuantity) } : {}),
+      ...(casePack ? { casePack: Number(casePack) } : {}),
     });
 
     console.log('[direct-submit] Workflow result:', JSON.stringify(result));
