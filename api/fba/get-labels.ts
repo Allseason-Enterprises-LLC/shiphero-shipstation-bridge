@@ -5,14 +5,15 @@ import axios from 'axios';
 export const config = { maxDuration: 60 };
 
 /**
- * Fetch FBA shipping labels for a shipment.
- * GET /api/fba/get-labels?shipmentId=FBA19CBZ0CPX&pageType=PackageLabel_Thermal
- * 
- * Uses Amazon v0 Fulfillment Inbound API (getLabels).
+ * Fetch FBA shipping labels.
+ * GET /api/fba/get-labels?shipmentId=FBA19CBZ0CPX&boxIds=FBA19CBZ0CPXU000001&pageType=PackageLabel_Thermal
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const shipmentId = (req.query.shipmentId || req.body?.shipmentId) as string;
   const pageType = (req.query.pageType || req.body?.pageType || 'PackageLabel_Thermal') as string;
+  const boxIdsParam = req.query.boxIds 
+    ? (Array.isArray(req.query.boxIds) ? req.query.boxIds : (req.query.boxIds as string).split(','))
+    : req.body?.boxIds || [];
 
   if (!shipmentId) {
     return res.status(400).json({ error: 'Missing shipmentId' });
@@ -27,26 +28,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const token = await auth.getAccessToken();
 
-    // Use v0 Fulfillment Inbound API for labels
+    // v0 FBA Inbound getLabels API
     const url = `https://sellingpartnerapi-na.amazon.com/fba/inbound/v0/shipments/${shipmentId}/labels`;
-    const boxIds = req.query.boxIds 
-      ? (Array.isArray(req.query.boxIds) ? req.query.boxIds : (req.query.boxIds as string).split(','))
-      : req.body?.boxIds || [];
+    
+    // Build query params
+    const params = new URLSearchParams();
+    params.set('PageType', pageType);
+    params.set('LabelType', 'UNIQUE');
+    params.set('NumberOfPackages', String(boxIdsParam.length || 1));
+    
+    // PackageLabelsToPrint needs to be repeated for each box ID
+    for (const boxId of boxIdsParam) {
+      params.append('PackageLabelsToPrint', boxId);
+    }
 
-    const params: Record<string, string | string[]> = {
-      PageType: pageType,
-      LabelType: 'UNIQUE',
-      PackageLabelsToPrint: boxIds as string[],
-    };
+    console.log(`[get-labels] Fetching labels: ${url}?${params.toString()}`);
 
-    console.log(`[get-labels] Fetching labels for ${shipmentId}, pageType=${pageType}`);
-
-    const response = await axios.get(url, {
+    const response = await axios.get(`${url}?${params.toString()}`, {
       headers: {
         'x-amz-access-token': token,
         'Content-Type': 'application/json',
       },
-      params,
     });
 
     const downloadUrl = response.data?.payload?.DownloadURL;
