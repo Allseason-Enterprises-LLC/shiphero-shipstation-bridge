@@ -146,7 +146,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       items: [{
         productId: body.product.cin7ProductId,
         quantity: body.quantity,
-        sku: body.product.cin7Sku,
       }],
       reference: `FBA-${body.product.cin7Sku}-${Date.now()}`,
     });
