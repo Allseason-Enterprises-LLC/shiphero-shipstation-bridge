@@ -232,7 +232,23 @@ export async function runFbaInboundWorkflow(
       }
     } catch (prepErr: unknown) {
       console.warn(`[fba-inbound] Could not check prep details for ${item.sellerSku}:`, prepErr);
-      // Continue anyway
+      // If we can't check, try setting prep to NONE anyway
+      console.log(`[fba-inbound] Attempting to set prep category for ${item.sellerSku} to NONE (fallback)...`);
+      try {
+        await client.setPrepDetails({
+          body: {
+            marketplaceId: options.marketplaceId,
+            mskuPrepDetails: [{
+              msku: item.sellerSku,
+              prepCategory: 'NONE' as const,
+              prepTypes: [],
+            }],
+          },
+        });
+        console.log(`[fba-inbound] Successfully set prep category for ${item.sellerSku} (fallback)`);
+      } catch (fallbackErr: unknown) {
+        console.error(`[fba-inbound] Fallback setPrepDetails also failed for ${item.sellerSku}:`, fallbackErr);
+      }
     }
   }
 
