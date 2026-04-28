@@ -43,8 +43,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Thermal printing requires width/height (in inches)
     if (labelType === 'THERMAL_PRINTING') {
-      bodyParams.width = req.body?.width || 3.5;  // Standard FNSKU label
-      bodyParams.height = req.body?.height || 1.125;
+      bodyParams.width = req.body?.width || 89;  // 3.5 inches = 89mm
+      bodyParams.height = req.body?.height || 29;  // 1.125 inches = 29mm
       bodyParams.pageType = req.body?.pageType || undefined;
     }
 
