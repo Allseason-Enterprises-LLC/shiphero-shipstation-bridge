@@ -265,3 +265,81 @@ export async function updateOrderPackingNote(
 
   console.log('[shiphero-wholesale] order_update (packing_note) result:', JSON.stringify(data));
 }
+
+/**
+ * Find a ShipHero order by CIN7 task ID (partner_order_id) or by matching SKU in recent orders.
+ * The CIN7→ShipHero bridge auto-creates orders with pattern CIN7-TR-XXXXX.
+ */
+export async function findOrderByPartnerIdOrRecent(
+  cin7TaskId: string,
+  sku: string
+): Promise<{ orderId: string; orderNumber: string; wholesaleOrderId: string } | null> {
+  // Try finding by partner_order_id first
+  try {
+    const data = await gql(`
+      query {
+        orders(partner_order_id: "${cin7TaskId}") {
+          data(first: 1) {
+            edges {
+              node {
+                id
+                order_number
+                fulfillment_status
+              }
+            }
+          }
+        }
+      }
+    `);
+    const edges = data?.orders?.data?.edges;
+    if (edges && edges.length > 0) {
+      const order = edges[0].node;
+      return {
+        orderId: order.id,
+        orderNumber: order.order_number,
+        wholesaleOrderId: order.id,
+      };
+    }
+  } catch (err) {
+    console.warn('[shiphero] partner_order_id lookup failed:', err);
+  }
+
+  // Fallback: search recent orders matching the SKU
+  try {
+    const data = await gql(`
+      query {
+        orders(sku: "${sku}") {
+          data(first: 5) {
+            edges {
+              node {
+                id
+                order_number
+                fulfillment_status
+                created_at
+              }
+            }
+          }
+        }
+      }
+    `);
+    const edges = data?.orders?.data?.edges;
+    if (edges && edges.length > 0) {
+      // Find the most recent pending order with CIN7-TR pattern
+      const cin7Order = edges.find((e: any) =>
+        e.node.order_number?.startsWith('CIN7-TR') &&
+        e.node.fulfillment_status === 'pending'
+      );
+      if (cin7Order) {
+        return {
+          orderId: cin7Order.node.id,
+          orderNumber: cin7Order.node.order_number,
+          wholesaleOrderId: cin7Order.node.id,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('[shiphero] SKU-based lookup failed:', err);
+  }
+
+  return null;
+}

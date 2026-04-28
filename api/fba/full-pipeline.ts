@@ -159,41 +159,68 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('[full-pipeline] Step 1 COMPLETE: CIN7 transfer created:', cin7TaskId);
 
     // ========================================
-    // STEP 2: Create ShipHero Wholesale Order
+    // STEP 2: Wait for ShipHero Wholesale Order (auto-created by CIN7 bridge)
     // ========================================
-    console.log('[full-pipeline] Step 2: Creating ShipHero wholesale order...');
+    console.log('[full-pipeline] Step 2: Waiting for ShipHero wholesale order from CIN7 bridge...');
     response.step = 'shiphero_order';
 
-    const orderNumber = `FBA-${cin7TaskId}-${Date.now()}`;
-    const packingNote = `FBA Shipment - ${body.product.name} - ${body.cases} cases - Labels will be attached after Amazon assigns destination`;
+    // The CIN7→ShipHero bridge auto-creates wholesale orders from CIN7 transfers.
+    // Poll for up to 60 seconds for it to appear, then fall back to creating one.
+    let shipheroFound = false;
+    for (let attempt = 1; attempt <= 6; attempt++) {
+      console.log(`[full-pipeline] Step 2: Polling for ShipHero order (attempt ${attempt}/6)...`);
+      try {
+        // Search by partner_order_id or recent orders
+        const { findOrderByPartnerIdOrRecent } = await import('../../lib/shiphero-wholesale');
+        const existingOrder = await findOrderByPartnerIdOrRecent(cin7TaskId, body.product.cin7Sku);
+        if (existingOrder) {
+          shipheroOrderId = existingOrder.orderId;
+          shipheroOrderNumber = existingOrder.orderNumber;
+          response.shipheroOrder = existingOrder;
+          shipheroFound = true;
+          console.log(`[full-pipeline] Step 2 COMPLETE: Found existing ShipHero order ${shipheroOrderNumber}`);
+          break;
+        }
+      } catch (lookupErr) {
+        console.warn('[full-pipeline] Step 2: Lookup error:', lookupErr);
+      }
+      if (attempt < 6) {
+        console.log('[full-pipeline] Step 2: Order not found yet, waiting 10s...');
+        await new Promise(r => setTimeout(r, 10000));
+      }
+    }
 
-    const shipheroResult = await createWholesaleOrder({
-      orderNumber,
-      items: [{
-        sku: body.product.cin7Sku,
-        quantity: body.quantity,
-        productName: body.product.name,
-      }],
-      packingNote,
-      shippingAddress: VEGAS_WAREHOUSE_ADDRESS,
-      warehouseId: process.env.SHIPHERO_WAREHOUSE_ID || 'V2FyZWhvdXNlOjEzNTg3Mg==',
-      customerAccountId: process.env.SHIPHERO_CUSTOMER_ACCOUNT_ID || '95145',
-    });
+    // Fallback: create the order if bridge hasn't run
+    if (!shipheroFound) {
+      console.log('[full-pipeline] Step 2: Bridge order not found, creating manually...');
+      const orderNumber = `FBA-${cin7TaskId.slice(0, 8)}-${Date.now()}`;
+      const packingNote = `FBA Shipment - ${body.product.name} - ${body.cases} cases`;
 
-    shipheroOrderId = shipheroResult.orderId;
-    shipheroOrderNumber = shipheroResult.orderNumber;
-    response.shipheroOrder = shipheroResult;
-    console.log('[full-pipeline] Step 2a COMPLETE: Wholesale order created:', shipheroOrderId);
+      const shipheroResult = await createWholesaleOrder({
+        orderNumber,
+        items: [{
+          sku: body.product.cin7Sku,
+          quantity: body.quantity,
+          productName: body.product.name,
+        }],
+        packingNote,
+        shippingAddress: VEGAS_WAREHOUSE_ADDRESS,
+        warehouseId: process.env.SHIPHERO_WAREHOUSE_ID || 'V2FyZWhvdXNlOjEzNTg3Mg==',
+        customerAccountId: process.env.SHIPHERO_CUSTOMER_ACCOUNT_ID || '95145',
+      });
 
-    // Auto-allocate for FEFO picking
-    console.log('[full-pipeline] Step 2b: Auto-allocating for FEFO picking...');
-    await autoAllocateWholesaleOrder(shipheroOrderId);
-    console.log('[full-pipeline] Step 2b COMPLETE: Auto-allocated');
+      shipheroOrderId = shipheroResult.orderId;
+      shipheroOrderNumber = shipheroResult.orderNumber;
+      response.shipheroOrder = shipheroResult;
+      console.log('[full-pipeline] Step 2 COMPLETE: Manually created order:', shipheroOrderId);
 
-    // Set ready to pick
-    console.log('[full-pipeline] Step 2c: Setting ready to pick...');
-    await setReadyToPick(shipheroOrderId);
-    console.log('[full-pipeline] Step 2c COMPLETE: Ready to pick');
+      try {
+        await autoAllocateWholesaleOrder(shipheroOrderId);
+        await setReadyToPick(shipheroOrderId);
+      } catch (allocErr) {
+        console.warn('[full-pipeline] Step 2: Allocation/pick warning:', allocErr);
+      }
+    }
 
     // ========================================
     // STEP 3: Submit Amazon FBA Shipment
