@@ -274,7 +274,7 @@ export async function runFbaInboundWorkflow(
           msku: i.sellerSku,
           quantity: i.quantity,
           labelOwner: 'SELLER' as const,
-          prepOwner: 'NONE' as const,
+          prepOwner: 'SELLER' as const,
           // createInboundPlan expects expiration as YYYY-MM-DD (just date)
           ...(i.expiration ? { expiration: i.expiration } : {}),
         })),
@@ -375,7 +375,7 @@ export async function runFbaInboundWorkflow(
                 msku: i.sellerSku,
                 quantity: options.casePack || i.quantity,
                 labelOwner: 'SELLER' as const,
-                prepOwner: (i.prepOwner || 'NONE') as 'SELLER' | 'AMAZON' | 'NONE',
+                prepOwner: (i.prepOwner || 'SELLER') as 'SELLER' | 'AMAZON' | 'NONE',
                 ...(i.expiration ? { expiration: i.expiration } : {}),
               })),
             })),
