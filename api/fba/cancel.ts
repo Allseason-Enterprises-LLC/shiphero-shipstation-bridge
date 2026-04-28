@@ -23,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
     const client = new FulfillmentInboundApiClient({ auth, region: 'na' });
 
-    const result = await client.cancelInboundPlan({ inboundPlanId: planId });
+    const result = await (client as any).cancelInboundPlan({ inboundPlanId: planId });
     return res.json({ success: true, planId, data: result.data });
   } catch (err: any) {
     return res.status(500).json({ 
