@@ -9,7 +9,10 @@
     "test": "node --test api/**/*.test.ts"
   },
   "dependencies": {
+    "@sp-api-sdk/auth": "^2.2.24",
+    "@sp-api-sdk/fulfillment-inbound-api-2024-03-20": "^3.3.9",
     "@supabase/supabase-js": "^2.39.0",
+    "axios": "^1.15.2",
     "node-fetch": "^3.3.2"
   },
   "devDependencies": {
