@@ -84,6 +84,8 @@ interface PipelineResponse {
   summary?: string;
   error?: string;
   step?: string;
+  labelAttachmentPending?: boolean;
+  attachLabelsPayload?: Record<string, any>;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -418,8 +420,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } catch (attachErr: any) {
         console.error('[full-pipeline] Attachment failed (non-fatal):', attachErr?.message);
       }
+    } else if (supabaseUrl && !shipheroOrderId) {
+      // ShipHero order not created yet by CIN7 bridge — schedule a retry
+      console.log('[full-pipeline] Step 6: ShipHero order not found yet. Will retry via /api/fba/attach-labels.');
+      response.labelAttachmentPending = true;
+      response.attachLabelsPayload = {
+        sku: body.product.cin7Sku,
+        labelsUrl: supabaseUrl,
+        shipmentId: shipmentConfirmationId,
+        productName: body.product.name,
+        cases: body.cases,
+        units: body.quantity,
+        expiration: body.expiration,
+        lot: '',
+      };
     } else {
-      console.log('[full-pipeline] Step 6 SKIPPED: No labels URL or ShipHero order ID');
+      console.log('[full-pipeline] Step 6 SKIPPED: No labels URL');
     }
 
     // ========================================
