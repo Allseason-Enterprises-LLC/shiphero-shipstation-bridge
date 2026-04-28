@@ -29,9 +29,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Use v0 Fulfillment Inbound API for labels
     const url = `https://sellingpartnerapi-na.amazon.com/fba/inbound/v0/shipments/${shipmentId}/labels`;
-    const params: Record<string, string> = {
+    const boxIds = req.query.boxIds 
+      ? (Array.isArray(req.query.boxIds) ? req.query.boxIds : (req.query.boxIds as string).split(','))
+      : req.body?.boxIds || [];
+
+    const params: Record<string, string | string[]> = {
       PageType: pageType,
       LabelType: 'UNIQUE',
+      PackageLabelsToPrint: boxIds as string[],
     };
 
     console.log(`[get-labels] Fetching labels for ${shipmentId}, pageType=${pageType}`);
