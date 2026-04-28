@@ -35,12 +35,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log(`[fnsku-labels] Requesting FNSKU labels for ${msku}, qty=${quantity}, type=${labelType}`);
 
+    const bodyParams: any = {
+      marketplaceId: 'ATVPDKIKX0DER',
+      labelType: labelType as any,
+      mskuQuantities: [{ msku, quantity: Number(quantity) }],
+    };
+
+    // Thermal printing requires width/height (in inches)
+    if (labelType === 'THERMAL_PRINTING') {
+      bodyParams.width = req.body?.width || 3.5;  // Standard FNSKU label
+      bodyParams.height = req.body?.height || 1.125;
+      bodyParams.pageType = req.body?.pageType || undefined;
+    }
+
     const result = await client.createMarketplaceItemLabels({
-      body: {
-        marketplaceId: 'ATVPDKIKX0DER',
-        labelType: labelType as any,
-        mskuQuantities: [{ msku, quantity: Number(quantity) }],
-      },
+      body: bodyParams,
     });
 
     const downloads = (result.data as any)?.documentDownloads || [];
