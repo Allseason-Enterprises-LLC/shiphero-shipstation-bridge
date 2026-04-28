@@ -422,7 +422,10 @@ export async function runFbaInboundWorkflow(
   }
   const placeOpts = (placeList.data as any)?.placementOptions ?? [];
   if (placeOpts.length === 0) throw new Error('listPlacementOptions: no options');
+  // Sort by fewest shipments (typically lowest total cost) then pick first
+  placeOpts.sort((a: any, b: any) => (a.shipmentIds?.length ?? 99) - (b.shipmentIds?.length ?? 99));
   const place = placeOpts[0];
+  console.log(`[fba-inbound] Selected placement: ${place.placementOptionId} with ${place.shipmentIds?.length} shipment(s) (out of ${placeOpts.length} options)`);
   const placementOptionId = place.placementOptionId;
   const shipmentIds: string[] = place.shipmentIds ?? [];
   if (!placementOptionId || shipmentIds.length === 0) throw new Error('Placement option missing placementOptionId or shipmentIds');
