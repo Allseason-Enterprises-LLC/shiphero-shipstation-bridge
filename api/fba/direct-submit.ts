@@ -68,7 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     console.log('[direct-submit] Workflow result:', JSON.stringify(result));
-    return res.status(result.success ? 200 : 500).json(result);
+    return res.status(200).json({ success: true, ...result });
   } catch (err: any) {
     console.error('[direct-submit] Error:', err);
     return res.status(500).json({ success: false, error: err.message });
