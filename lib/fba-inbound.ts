@@ -220,7 +220,7 @@ export async function runFbaInboundWorkflow(
               mskuPrepDetails: [{
                 msku: item.sellerSku,
                 prepCategory: 'NONE' as const,
-                prepTypes: [],
+                prepTypes: ['ITEM_NO_PREP' as any],
               }],
             },
           });
@@ -241,7 +241,7 @@ export async function runFbaInboundWorkflow(
             mskuPrepDetails: [{
               msku: item.sellerSku,
               prepCategory: 'NONE' as const,
-              prepTypes: [],
+              prepTypes: ['ITEM_NO_PREP' as any],
             }],
           },
         });

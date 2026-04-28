@@ -39,7 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           mskuPrepDetails: [{
             msku,
             prepCategory: 'NONE' as any,
-            prepTypes: [],
+            prepTypes: ['ITEM_NO_PREP' as any],
           }],
         },
       });
