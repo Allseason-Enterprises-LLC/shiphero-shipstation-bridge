@@ -199,3 +199,69 @@ export async function getExpirationLots(sku: string): Promise<Array<{ name: stri
     isActive: e.node.is_active,
   }));
 }
+
+/**
+ * Add an attachment to an order.
+ * Uses ShipHero GraphQL mutation order_add_attachment.
+ */
+export async function addOrderAttachment(
+  orderId: string, 
+  url: string, 
+  description: string
+): Promise<void> {
+  const mutation = `
+    mutation order_add_attachment($data: OrderAddAttachmentInput!) {
+      order_add_attachment(data: $data) {
+        request_id
+        complexity
+        attachment {
+          id
+          url
+          description
+        }
+      }
+    }
+  `;
+
+  const data = await gql(mutation, {
+    data: {
+      order_id: orderId,
+      url: url,
+      description: description,
+    },
+  });
+
+  console.log('[shiphero-wholesale] order_add_attachment result:', JSON.stringify(data));
+}
+
+/**
+ * Update the packing note on an order.
+ * Uses ShipHero GraphQL mutation order_update.
+ */
+export async function updateOrderPackingNote(
+  orderId: string, 
+  note: string
+): Promise<void> {
+  const mutation = `
+    mutation order_update($data: OrderUpdateMutationInput!) {
+      order_update(data: $data) {
+        request_id
+        complexity
+        order {
+          id
+          order_number
+          packing_note
+        }
+      }
+    }
+  `;
+
+  const data = await gql(mutation, {
+    data: {
+      order_id: orderId,
+      packing_note: note,
+    },
+  });
+
+  console.log('[shiphero-wholesale] order_update (packing_note) result:', JSON.stringify(data));
+}
