@@ -1,13 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { SellingPartnerApiAuth } from '@sp-api-sdk/auth';
-import { FulfillmentInboundApiClient } from '@sp-api-sdk/fulfillment-inbound-api-2024-03-20';
+import axios from 'axios';
 
 export const config = { maxDuration: 60 };
 
 /**
  * Cancel an FBA inbound plan.
- * POST /api/fba/cancel
- * { "planId": "wf..." }
+ * POST /api/fba/cancel { "planId": "wf..." }
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
@@ -21,10 +20,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       clientSecret: process.env.AMAZON_CLIENT_SECRET!,
       refreshToken: process.env.AMAZON_REFRESH_TOKEN!,
     });
-    const client = new FulfillmentInboundApiClient({ auth, region: 'na' });
 
-    const result = await (client as any).cancelInboundPlan({ inboundPlanId: planId });
-    return res.json({ success: true, planId, data: result.data });
+    const token = await auth.getAccessToken();
+    const url = `https://sellingpartnerapi-na.amazon.com/inbound/fba/2024-03-20/inboundPlans/${planId}/cancellation`;
+    
+    const response = await axios.put(url, {}, {
+      headers: {
+        'x-amz-access-token': token,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    return res.json({ success: true, planId, data: response.data });
   } catch (err: any) {
     return res.status(500).json({ 
       success: false, 
