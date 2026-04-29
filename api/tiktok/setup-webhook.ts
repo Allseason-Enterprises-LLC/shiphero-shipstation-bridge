@@ -1,0 +1,150 @@
+/**
+ * POST /api/tiktok/setup-webhook
+ * 
+ * Creates a ShipHero webhook that fires on new order creation.
+ * This webhook will POST to our /api/tiktok/route-order endpoint
+ * so we can automatically route TikTok orders to the correct warehouse.
+ * 
+ * Should only be called once during initial setup.
+ * 
+ * Body:
+ * { "action": "create" | "list" | "delete", "webhook_id": "..." (for delete) }
+ */
+
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { supabase } from '../../lib/supabase';
+
+const SHIPHERO_API = 'https://public-api.shiphero.com/graphql';
+const WEBHOOK_URL = process.env.VERCEL_URL
+  ? `https://${process.env.VERCEL_URL}/api/tiktok/route-order`
+  : 'https://shiphero-shipstation-bridge.vercel.app/api/tiktok/route-order';
+
+async function getShipHeroToken(): Promise<string> {
+  if (process.env.SHIPHERO_ACCESS_TOKEN) {
+    return process.env.SHIPHERO_ACCESS_TOKEN;
+  }
+
+  const { data, error } = await supabase
+    .from('warehouses')
+    .select('api_credentials')
+    .eq('id', process.env.SHIPHERO_WAREHOUSE_ID!)
+    .eq('provider', 'shiphero')
+    .single();
+
+  if (error) throw new Error(`Failed to get ShipHero token: ${error.message}`);
+  const creds = data?.api_credentials as any;
+  if (!creds?.accessToken) throw new Error('No ShipHero access token');
+  return creds.accessToken;
+}
+
+async function gql(query: string, variables?: Record<string, any>): Promise<any> {
+  const token = await getShipHeroToken();
+
+  const response = await fetch(SHIPHERO_API, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ query, variables }),
+  });
+
+  const json: any = await response.json();
+  if (json.errors) {
+    throw new Error(`ShipHero GQL error: ${JSON.stringify(json.errors)}`);
+  }
+  return json.data;
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // Auth - internal only
+  const authHeader = req.headers['authorization'];
+  const apiKey = process.env.INTERNAL_API_KEY;
+  if (apiKey && authHeader !== `Bearer ${apiKey}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const { action, webhook_id } = req.body;
+
+  try {
+    if (action === 'list') {
+      const data = await gql(`
+        query {
+          webhooks {
+            request_id
+            data(first: 50) {
+              edges {
+                node {
+                  id
+                  account_id
+                  name
+                  url
+                  source
+                  shop_name
+                }
+              }
+            }
+          }
+        }
+      `);
+      return res.status(200).json({ webhooks: data.webhooks });
+    }
+
+    if (action === 'create') {
+      const data = await gql(`
+        mutation($data: CreateWebhookInput!) {
+          webhook_create(data: $data) {
+            request_id
+            webhook {
+              id
+              account_id
+              name
+              url
+              source
+            }
+          }
+        }
+      `, {
+        data: {
+          name: 'TikTok Order Routing',
+          url: WEBHOOK_URL,
+          source: 'order_create',
+          shop_name: '*',  // All shops - we filter inside route-order
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        webhook: data.webhook_create.webhook,
+        note: 'Webhook created. It will fire on every new order. The route-order endpoint filters for TikTok orders only.',
+      });
+    }
+
+    if (action === 'delete') {
+      if (!webhook_id) {
+        return res.status(400).json({ error: 'Missing webhook_id' });
+      }
+
+      const data = await gql(`
+        mutation($data: DeleteWebhookInput!) {
+          webhook_delete(data: $data) {
+            request_id
+          }
+        }
+      `, {
+        data: { id: webhook_id },
+      });
+
+      return res.status(200).json({ success: true, deleted: webhook_id });
+    }
+
+    return res.status(400).json({ error: 'Invalid action. Use: create, list, delete' });
+  } catch (error: any) {
+    console.error('Webhook setup error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+}
